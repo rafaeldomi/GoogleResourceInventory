@@ -380,6 +380,35 @@ def list_pubsub_topics(project_id):
 
     return topics
 
+def list_networks(project_id):
+    Logger.log (1, f"PRJ: {project_id} - Networks")
+
+    networks = {}
+    networks['net'] = []
+    networks['peer'] = []
+    
+    client = discovery.build('compute', 'v1')
+    raw_resp = client.networks().list(project=project_id).execute()
+    vpc_resp = EasyDict(raw_resp)
+
+    for vpc in vpc_resp.items:
+        #print(vpc)
+        network_data = {
+            'project': project_id,
+            'name': vpc.name
+        }
+        networks['net'].append(network_data)
+
+        for peer in vpc.peerings:
+            peer_data = {
+                'project': project_id,
+                'network': vpc.name,
+                'peer_network': peer.network
+            }
+            networks['peer'].append(peer_data)
+
+    return networks
+
 def save_to_json(data, resource_type, output_directory):
     if len(data) == 0:
         return
@@ -390,6 +419,7 @@ def save_to_json(data, resource_type, output_directory):
 
 def save_to_csv(data, resource_type, output_directory):
     if len(data) == 0:
+        #Logger.log(2, f'{resource_type} with no data')
         return
 
     output_path = os.path.join(output_directory, f"output_{resource_type}.csv")
@@ -429,9 +459,18 @@ def main():
     all_gke_clusters = []
     all_artifact_repos = []
     all_pubsub_topics = []  
+    all_networks = {}
+    all_networks['net'] = []
+    all_networks['peer'] = []
 
     for project in projects:
         Logger.log(1, f"** Processing project: {project} **")
+
+        # Network VPC and subnets
+        if not args.options or 'network' in args.options:
+            networks = list_networks(project)
+            all_networks['net'].extend(networks['net'])
+            all_networks['peer'].extend(networks['peer'])
 
         # Compute Machines
         if not args.options or 'compute' in args.options:
@@ -468,12 +507,15 @@ def main():
             pubsub_topics = list_pubsub_topics(project)
             all_pubsub_topics.extend(pubsub_topics)
 
+    Logger.log(1, "Saving to output")
     output_directory = 'output'
     os.makedirs(output_directory, exist_ok=True)
 
-    Logger.log(1, "Saving to output")
-
     if 'csv' in args.output:
+        Logger.log(1, " |- Saving to csv")
+
+        save_to_csv(all_networks['net'], 'network', output_directory)
+        save_to_csv(all_networks['peer'], 'network_peer', output_directory)
         save_to_csv(all_instances, 'compute', output_directory)
         save_to_csv(all_cloudsql, 'cloudsql', output_directory)
         save_to_csv(all_functions, 'functions', output_directory)
@@ -482,8 +524,12 @@ def main():
         save_to_csv(all_artifact_repos, 'artifact', output_directory)
         save_to_csv(all_pubsub_topics, 'pubsub', output_directory)
     if 'xls' in args.output:
+        Logger.log(1, " |- Saving to xls")
+
         xls_path = os.path.join(output_directory, 'output.xlsx')
         with pd.ExcelWriter(xls_path) as writer:
+            save_to_xls(all_networks['net'], 'network', writer)
+            save_to_xls(all_networks['peer'], 'network_peer', writer)
             save_to_xls(all_instances, 'compute', writer)
             save_to_xls(all_cloudsql, 'cloudsql', writer)
             save_to_xls(all_functions, 'functions', writer)
