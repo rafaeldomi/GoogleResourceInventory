@@ -1,4 +1,8 @@
 #!/usr/bin/python3
+
+# https://discovery.googleapis.com/discovery/v1/apis
+# https://developers.google.com/discovery/v1/reference?hl=en
+
 import argparse
 import csv
 import json
@@ -6,11 +10,14 @@ import os
 import pandas as pd
 import subprocess
 import datetime
+import warnings
 from collections import defaultdict
 from google.cloud import compute_v1
 from googleapiclient import discovery
 from google.cloud import monitoring_v3
 from easydict import EasyDict
+
+warnings.filterwarnings("ignore", "Your application has authenticated using end user credentials")
 
 class Logger:
     level = 1  # Default log level
@@ -104,6 +111,11 @@ def list_vm_instances(project_id):
     Logger.log (1, f"PRJ: {project_id} - Compute Machines")
 
     instances = []
+
+    if not check_api_is_enabled(project_id,'compute'):
+        Logger.log(2, "  | Compute API is not enabled")
+        return instances
+
     compute_client = compute_v1.InstancesClient()
 
     request = compute_v1.AggregatedListInstancesRequest()
@@ -174,6 +186,9 @@ def list_cloudsql_instances(project_id):
     raw_resp = sql_client.instances().list(project=project_id).execute()
     resp = EasyDict(raw_resp)
 
+    if not 'items' in resp:
+        return instances
+
     Logger.log(2, f' |- Found {len(resp.items)}')
 
     for inst in resp.items:
@@ -193,6 +208,10 @@ def list_functions(project_id):
     Logger.log (1, f"PRJ: {project_id} - Functions")
 
     functions = []
+
+    if not check_api_is_enabled(project_id,'cloudfunctions'):
+        Logger.log (2, "  | cloudfunctions API not enabled")
+        return functions
 
     client = discovery.build('cloudfunctions', 'v1')
     # Note the use of - (dash) indicating all locations
@@ -301,12 +320,26 @@ def list_gke_clusters(project_id):
 
     resp = EasyDict(raw_resp)
 
+    if not 'clusters' in resp:
+        return clusters
+
     Logger.log(2, f" |- Found {len(resp.clusters)} GKE clusters")
 
     for cluster in resp.clusters:
         #print(cluster)
 
         for np in cluster.nodePools:
+            minNodeCount = 0
+            maxNodeCount = 0
+            initialNodeCount = 0
+            if 'autoscaling' in np:
+                if 'minNodeCount' in np.autoscaling:
+                    minNodeCount = np.autoscaling.minNodeCount
+                if 'maxNodeCount' in np.autoscaling:
+                    maxNodeCount = np.autoscaling.maxNodeCount
+            if 'initialNodeCount' in np:
+                initialNodeCount = np.initialNodeCount
+
             cluster_data = {
                 'project': project_id,
                 'name': cluster.name,
@@ -319,39 +352,64 @@ def list_gke_clusters(project_id):
                 'diskSizeGb': np.config.diskSizeGb,
                 'preemptible': np.get('np.config.preemptible', False),
                 'version': np.version,
-                'minNodeCount': np.autoscaling.minNodeCount,
-                'maxNodeCount': np.autoscaling.maxNodeCount,
-                'initialNodeCount': np.initialNodeCount
+                'minNodeCount': minNodeCount,
+                'maxNodeCount': maxNodeCount,
+                'initialNodeCount': initialNodeCount
             }
             clusters.append(cluster_data)
 
     return clusters
 
 def list_artifact_registry_repos(project_id):
+    # https://cloud.google.com/artifact-registry/docs/reference/rest/v1/projects.locations.repositories/list
     Logger.log (1, f"PRJ: {project_id} - Artifact Registry")
 
     repositories = []
 
     if not check_api_is_enabled(project_id,'artifactregistry'):
+        Logger.log(2, "  | Artifact Registry API is not enabled")
         return repositories
     
     client = discovery.build('artifactregistry', 'v1')
 
-    raw_resp = client.projects().locations().repositories().list(
-        parent=f'projects/{project_id}/locations/-'
-    ).execute()
-    resp = EasyDict(raw_resp)
+    # get all locations
+    raw_resp = client.projects().locations().list(
+            name=f'projects/{project_id}'
+        ).execute()
+    resp_location = EasyDict(raw_resp)
 
-    Logger.log(2, f' |- Found {len(resp.repositories)}')
+    for location in resp_location.locations:
+        Logger.log (3, f'  | Location: {location}')
+    
+        raw_resp = client.projects().locations().repositories().list(
+            parent=f'projects/{project_id}/locations/{location.locationId}'
+        ).execute()
+        resp = EasyDict(raw_resp)
 
-    for rep in resp.repositories:
-        repository_data = {
-            'project': project_id,
-            'name': rep.name,
-            'location': rep.location,
-            'format': rep.format
-        }
-        repositories.append(repository_data)
+        # There is not repository in this location
+        if not 'repositores' in resp:
+            continue
+
+        Logger.log(2, f' |- Found {len(resp.repositories)}')
+
+        for rep in resp.repositories:
+            print(rep)
+
+            sizeB=0
+            if 'sizeBytes' in rep:
+                sizeB = rep.sizeBytes
+
+            parts=rep.name.split('/')
+            name=parts[-1]
+
+            repository_data = {
+                'project': project_id,
+                'name': name,
+                'location': location.locationId,
+                'format': rep.format,
+                'sizeBytes': sizeB
+            }
+            repositories.append(repository_data)
 
     return repositories
 
@@ -365,6 +423,9 @@ def list_pubsub_topics(project_id):
             project=f'projects/{project_id}'
         ).execute()
     resp = EasyDict(raw_resp)
+
+    if not 'topics' in resp:
+        return topics
 
     Logger.log (2, f' |- Found {len(resp.topics)}')
 
@@ -386,6 +447,10 @@ def list_networks(project_id):
     networks = {}
     networks['net'] = []
     networks['peer'] = []
+
+    if not check_api_is_enabled(project_id,'compute'):
+        Logger.log (2, "  | Compute API is not enabled")
+        return networks
     
     client = discovery.build('compute', 'v1')
     raw_resp = client.networks().list(project=project_id).execute()
@@ -399,13 +464,14 @@ def list_networks(project_id):
         }
         networks['net'].append(network_data)
 
-        for peer in vpc.peerings:
-            peer_data = {
-                'project': project_id,
-                'network': vpc.name,
-                'peer_network': peer.network
-            }
-            networks['peer'].append(peer_data)
+        if 'peerings' in vpc:
+            for peer in vpc.peerings:
+                peer_data = {
+                    'project': project_id,
+                    'network': vpc.name,
+                    'peer_network': peer.network
+                }
+                networks['peer'].append(peer_data)
 
     return networks
 
@@ -424,8 +490,16 @@ def save_to_csv(data, resource_type, output_directory):
 
     output_path = os.path.join(output_directory, f"output_{resource_type}.csv")
     with open(output_path, 'w', newline='') as csvfile:
+        # Write a line (commented) that has some metadata info about this file
+        today = datetime.datetime.today()
+        date=today.strftime('%d/%m/%y %H:%M:%S')
+        csvfile.write(f'# Type: {resource_type} Date: {date}\n')
+
+        # Dump the Dict variable
         writer = csv.DictWriter(csvfile, fieldnames=data[0].keys())
+        # Write the header
         writer.writeheader()
+        # Plot the data
         writer.writerows(data)
 
 def save_to_xls(data, resource_type, writer):
