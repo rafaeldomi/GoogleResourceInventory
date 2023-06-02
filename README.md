@@ -42,5 +42,5 @@ Example: Collect data of gcs and gke only:
 - PubSub
 
 ## Questions
-- Question: Why reading compute machines is slow?
-  Response: During the process of reading compute machines the process also searchs in the monitoring metrics for the CPU usage of the machine.
+- Question: Why reading compute machines that some time?<br>
+  Response: During the process of reading compute machines, the collector reads also the 1-The metrics of CPU from the monitoring service 2-Get the machineType for CPU e mem

@@ -117,6 +117,7 @@ def list_vm_instances(project_id):
         return instances
 
     compute_client = compute_v1.InstancesClient()
+    machineClient = compute_v1.MachineTypesClient()
 
     request = compute_v1.AggregatedListInstancesRequest()
     request.project = project_id
@@ -125,10 +126,10 @@ def list_vm_instances(project_id):
 
     agg_list = compute_client.aggregated_list(request=request)
 
-    all_instances = defaultdict(list)
+    #all_instances = defaultdict(list)
     for zone, response in agg_list:
         if response.instances:
-            all_instances[zone].extend(response.instances)
+            #all_instances[zone].extend(response.instances)
             Logger.log (2, f" |- Found {len(response.instances)} in zone {zone}")
             total=len(response.instances)
             i=0
@@ -150,6 +151,7 @@ def list_vm_instances(project_id):
                 parts=instance.machine_type.split('/')
                 machine_type=parts[-1]
 
+                # Get Size and Type of OS
                 diskSize=0
                 SO="NOT Win"
                 for disk in instance.disks:
@@ -158,14 +160,33 @@ def list_vm_instances(project_id):
                     if contains_windows:
                         SO="Windows"
 
+                # Check for the goog-gke-node label
+                IS_GKE=True if 'goog-gke-node' in instance.labels else False
+
+                # Check if preemptible
+                PREEMPTIBLE=False
+                if 'scheduling' in instance:
+                    PREEMPTIBLE=instance.scheduling.preemptible
+
+                # Find the type of the machinetype
+                machine=machineClient.get(
+                        project=project_id,
+                        zone=zone.split('/')[-1],
+                        machine_type=machine_type
+                    )
+
                 instance_data = {
                     'project': project_id,
                     'name': instance.name,
-                    'zone': zone,
+                    'zone': zone.split('/')[-1],
                     'status': instance.status,
                     'machine_type': machine_type,
+                    'Cpu': machine.guest_cpus,
+                    'MemMb': machine.memory_mb,
                     'diskSizeGb': diskSize,
                     'SO': SO,
+                    'IsGke': IS_GKE,
+                    'Preemptible': PREEMPTIBLE,
                     'labels': instance.labels,
                     'cpu_avg': avg_cpu_usage,
                     'cpu_p95': p95_cpu_usage
@@ -387,7 +408,7 @@ def list_artifact_registry_repos(project_id):
         resp = EasyDict(raw_resp)
 
         # There is not repository in this location
-        if not 'repositores' in resp:
+        if not 'repositories' in resp:
             continue
 
         Logger.log(2, f' |- Found {len(resp.repositories)}')
