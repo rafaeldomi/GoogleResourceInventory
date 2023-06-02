@@ -213,13 +213,16 @@ def list_cloudsql_instances(project_id):
     Logger.log(2, f' |- Found {len(resp.items)}')
 
     for inst in resp.items:
-        #print(inst)
-        # Search for the CPU metrics
-
         instance_data = {
             'project': project_id,
             'name': inst.name,
-            'database_version': inst.databaseVersion
+            'database_version': inst.databaseVersion,
+            'installedVersion': inst.databaseInstalledVersion,
+            'tier': inst.settings.tier,
+            'instanceType': inst.instanceType,
+            'region': inst.region,
+            'diskType': inst.settings.dataDiskType,
+            'diskSizeGb': inst.settings.dataDiskSizeGb
         }
         instances.append(instance_data)
 
@@ -284,8 +287,6 @@ def list_gcs_buckets(project_id):
                 "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
             }
         )
-
-        #print(results)
 
         return results
     
