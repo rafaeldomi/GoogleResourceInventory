@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 # https://discovery.googleapis.com/discovery/v1/apis
+# https://cloud.google.com/python/docs/reference
 # https://developers.google.com/discovery/v1/reference?hl=en
 
 import argparse
@@ -541,12 +542,10 @@ def list_artifact_registry_repos(project_id):
         Logger.log(2, f' |- Found {len(resp.repositories)}')
 
         for rep in resp.repositories:
-            #print(rep)
-
             sizeB=0
             if 'sizeBytes' in rep:
                 sizeB = rep.sizeBytes
-            size = GetHumanReadable(sizeb)
+            size = GetHumanReadable(int(sizeB))
 
             parts=rep.name.split('/')
             name=parts[-1]
