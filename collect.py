@@ -650,6 +650,40 @@ def list_networks(project_id):
 
     return networks
 
+def list_deployments(project_id):
+    Logger.log(1, f"PRJ: {project_id} - DeploymentManager")
+    deployments = []
+
+    client = discovery.build('deploymentmanager', 'v2')
+
+    # https://cloud.google.com/deployment-manager/docs/reference/latest/deployments/list
+    raw_resp = client.deployments().list(project=project_id).execute()
+    resp = EasyDict (raw_resp)
+    
+    if 'deployments' in resp:
+        for dep in resp.deployments:
+            partner = next((label['value'] for label in dep.labels if label['key'] == 'cloud-marketplace-partner-id'), None)
+            solution = next((label['value'] for label in dep.labels if label['key'] == 'cloud-marketplace-solution-id'), None)
+
+            # Check the instance associate
+            raw_resources = client.resources().list(deployment=dep.name,project=project_id).execute()
+            resources=EasyDict(raw_resources)
+            instance_name=""
+            for rsc in resources.resources:
+                if rsc.type == "compute.v1.instance":
+                    instance_name=rsc.name
+                    break
+
+            data = {
+                'name': dep.name,
+                'partner': partner,
+                'solution': solution,
+                'instance': instance_name
+            }
+            deployments.append(data)
+
+    return deployments
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--file', help='File with a list of GCP projects')
@@ -680,6 +714,7 @@ def main():
     all_artifact_repos = []
     all_pubsub_topics = []  
     all_networks = {}
+    all_deployments = []
 
     all_projects = list(map(lambda project_id: {'project': project_id}, projects))
 
@@ -688,13 +723,15 @@ def main():
 
         # Network VPC, VPN, Peerings
         if not args.options or 'network' in args.options:
-            networks = list_networks(project)
-            all_networks = networks
+            all_networks = list_networks(project)
+
+        # Deployments (those from marketplace)
+        if not args.options or 'deployment' in args.options:
+            all_deployments = list_deployments(project)
 
         # Compute Machines
         if not args.options or 'compute' in args.options:
-            instances = list_vm_instances(project, args.gke_ignore)
-            all_instances.extend(instances)
+            all_instances = list_vm_instances(project, args.gke_ignore)
         
         # CloudSQL
         if not args.options or 'sql' in args.options:
@@ -743,6 +780,7 @@ def main():
     Exporter.export(all_gke_clusters, 'gke')
     Exporter.export(all_artifact_repos, 'artifact')
     Exporter.export(all_pubsub_topics, 'pubsub')
+    Exporter.export(all_deployments, 'deployments')
     Exporter.export(all_projects, 'projects')
 
     Logger.log(1, 'Finished')
