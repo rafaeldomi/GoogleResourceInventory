@@ -330,6 +330,10 @@ def list_cloudsql_instances(project_id):
     # https://stackoverflow.com/questions/69658130/how-can-i-get-list-of-all-cloud-sql-gcp-instances-which-are-stopped-in-pytho
     instances = []
 
+    if not check_api_is_enabled(project_id,'sqladmin'):
+        Logger.log(2, "  \. CloudSQL API is not enabled")
+        return instances
+
     # Look for the instances in this project
     sql_client = discovery.build('sqladmin', 'v1beta4')
     raw_resp = sql_client.instances().list(project=project_id).execute()
@@ -463,6 +467,11 @@ def list_gke_clusters(project_id):
     Logger.log (1, f"PRJ: {project_id} - GKE")
 
     clusters = []
+
+    if not check_api_is_enabled(project_id,'container'):
+        Logger.log(2, "  \. Container API is not enabled")
+        return clusters
+
     client = discovery.build('container', 'v1')
     # Note the use of dash (-) to get from all locations
     raw_resp = client.projects().locations().clusters().list(
