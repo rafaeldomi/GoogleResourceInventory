@@ -236,7 +236,7 @@ def list_vm_instances(project_id, gke_ignore):
     instances = []
 
     if not check_api_is_enabled(project_id,'compute'):
-        Logger.log(2, "  | Compute API is not enabled")
+        Logger.log(2, "  \. Compute API is not enabled")
         return instances
 
     compute_client = compute_v1.InstancesClient()
@@ -362,7 +362,7 @@ def list_functions(project_id):
     functions = []
 
     if not check_api_is_enabled(project_id,'cloudfunctions'):
-        Logger.log (2, "  | cloudfunctions API not enabled")
+        Logger.log (2, "  \. cloudfunctions API not enabled")
         return functions
 
     client = discovery.build('cloudfunctions', 'v1')
@@ -518,7 +518,7 @@ def list_artifact_registry_repos(project_id):
     repositories = []
 
     if not check_api_is_enabled(project_id,'artifactregistry'):
-        Logger.log(2, "  | Artifact Registry API is not enabled")
+        Logger.log(2, "  \. Artifact Registry API is not enabled")
         return repositories
     
     client = discovery.build('artifactregistry', 'v1')
@@ -601,7 +601,7 @@ def list_networks(project_id):
     networks['vpn'] = []
 
     if not check_api_is_enabled(project_id,'compute'):
-        Logger.log (2, "  | Compute API is not enabled")
+        Logger.log (2, "  \. Compute API is not enabled")
         return networks
     
     # https://cloud.google.com/compute/docs/reference/rest/v1
@@ -609,7 +609,7 @@ def list_networks(project_id):
 
     # Collect VPN data
     # https://cloud.google.com/compute/docs/reference/rest/v1/vpnTunnels/aggregatedList
-    Logger.log(2, 'Searching for VPN')
+    Logger.log(2, '  | Searching for VPN')
 
     r_vpn_agg = client.vpnTunnels().aggregatedList(project=project_id).execute()
     for name, vpn_tunnels_scoped_list in r_vpn_agg['items'].items():
@@ -653,6 +653,10 @@ def list_networks(project_id):
 def list_deployments(project_id):
     Logger.log(1, f"PRJ: {project_id} - DeploymentManager")
     deployments = []
+
+    if not check_api_is_enabled(project_id,'deploymentmanager'):
+        Logger.log(2, "  \. DeploymentManager API is not enabled")
+        return deployments
 
     client = discovery.build('deploymentmanager', 'v2')
 
