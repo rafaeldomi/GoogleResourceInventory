@@ -23,6 +23,7 @@ from google.auth import default as gcp_cred
 from easydict import EasyDict
 from collections import defaultdict
 
+# Remove these warnings, to have a clean output
 warnings.filterwarnings("ignore", "Your application has authenticated using end user credentials")
 
 class Logger:
@@ -314,7 +315,7 @@ def list_vm_instances(project_id, gke_ignore):
                     'SO': SO,
                     'IsGke': IS_GKE,
                     'Preemptible': PREEMPTIBLE,
-                    'labels': instance.labels,
+                    'labels': str(instance.labels),
                     'cpu_avg': avg_cpu_usage,
                     'cpu_p95': p95_cpu_usage
                 }
@@ -441,19 +442,20 @@ def list_gcs_buckets(project_id):
     raw_resp = client.buckets().list(project=project_id).execute()
     resp = EasyDict(raw_resp)
 
-    for bkt in resp.items:
-        sizeb = get_metric_by_bucket(metrics_res, bkt.name)
-        size = GetHumanReadable(sizeb)
+    if 'items' in resp:
+        for bkt in resp.items:
+            sizeb = get_metric_by_bucket(metrics_res, bkt.name)
+            size = GetHumanReadable(sizeb)
 
-        bucket_data = {
-            'project': project_id,
-            'name': bkt.name,
-            'location': bkt.location,
-            'storageClass': bkt.storageClass,
-            'sizeb': sizeb,
-            'size': size
-        }
-        buckets.append(bucket_data)
+            bucket_data = {
+                'project': project_id,
+                'name': bkt.name,
+                'location': bkt.location,
+                'storageClass': bkt.storageClass,
+                'sizeb': sizeb,
+                'size': size
+            }
+            buckets.append(bucket_data)
 
     return buckets
 
@@ -728,9 +730,12 @@ def main():
 
     # Export the collected data to the desired outputs
     Exporter.set_outputs(args.output)
-    Exporter.export(all_networks['net'], 'network')
-    Exporter.export(all_networks['peer'], 'net_peer')
-    Exporter.export(all_networks['vpn'], 'net_vpn')
+    if 'net' in all_networks:
+        Exporter.export(all_networks['net'], 'network')
+    if 'peer' in all_networks:
+        Exporter.export(all_networks['peer'], 'net_peer')
+    if 'vpn' in all_networks:
+        Exporter.export(all_networks['vpn'], 'net_vpn')
     Exporter.export(all_instances, 'compute')
     Exporter.export(all_cloudsql, 'cloudsql')
     Exporter.export(all_functions, 'functions')
