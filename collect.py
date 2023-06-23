@@ -672,11 +672,15 @@ def list_deployments(project_id):
     # https://cloud.google.com/deployment-manager/docs/reference/latest/deployments/list
     raw_resp = client.deployments().list(project=project_id).execute()
     resp = EasyDict (raw_resp)
-    
+
     if 'deployments' in resp:
         for dep in resp.deployments:
-            partner = next((label['value'] for label in dep.labels if label['key'] == 'cloud-marketplace-partner-id'), None)
-            solution = next((label['value'] for label in dep.labels if label['key'] == 'cloud-marketplace-solution-id'), None)
+            
+            partner = ""
+            solution = ""
+            if 'labels' in dep:
+                partner = next((label['value'] for label in dep.labels if label['key'] == 'cloud-marketplace-partner-id'), None)
+                solution = next((label['value'] for label in dep.labels if label['key'] == 'cloud-marketplace-solution-id'), None)
 
             # Check the instance associate
             raw_resources = client.resources().list(deployment=dep.name,project=project_id).execute()
@@ -727,6 +731,9 @@ def main():
     all_artifact_repos = []
     all_pubsub_topics = []  
     all_networks = {}
+    all_networks['net'] = []
+    all_networks['peer'] = []
+    all_networks['vpn'] = []
     all_deployments = []
 
     all_projects = list(map(lambda project_id: {'project': project_id}, projects))
@@ -736,15 +743,21 @@ def main():
 
         # Network VPC, VPN, Peerings
         if not args.options or 'network' in args.options:
-            all_networks = list_networks(project)
+            networks = list_networks(project)
+
+            all_networks['net'].extend(networks['net'])
+            all_networks['peer'].extend(networks['peer'])
+            all_networks['vpn'].extend(networks['vpn'])
 
         # Deployments (those from marketplace)
         if not args.options or 'deployment' in args.options:
-            all_deployments = list_deployments(project)
+            deployments = list_deployments(project)
+            all_deployments.extend(deployments)
 
         # Compute Machines
         if not args.options or 'compute' in args.options:
-            all_instances = list_vm_instances(project, args.gke_ignore)
+            instances = list_vm_instances(project, args.gke_ignore)
+            all_instances.extend(instances)
         
         # CloudSQL
         if not args.options or 'sql' in args.options:
