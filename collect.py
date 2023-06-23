@@ -692,6 +692,7 @@ def list_deployments(project_id):
                     break
 
             data = {
+                'project': project_id,
                 'name': dep.name,
                 'partner': partner,
                 'solution': solution,
