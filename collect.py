@@ -122,10 +122,34 @@ class Exporter:
         for row in dataframe_to_rows(df, index=False, header=True):
             sheet.append(row)
 
+        ## ----
+        ## Styling
+        ##  1. Bold to the header row
+        ##  2. Colorize the table
+        ##  3. Freeze both first row and column
+        ##  4. Adjust Column width to better fit the text
+        ## ----
+
         # Apply bold formatting to the first row
         first_row = sheet[1]
         for cell in first_row:
             cell.font = Font(bold=True)
+
+        # Apply color scheme to the table
+        header_fill = PatternFill(start_color="003F77", end_color="003F77", fill_type="solid")
+        data_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+        header_row = sheet[1]
+        for cell in header_row:
+            cell.fill = header_fill
+            cell.font = Font(bold=True, color="00FFFFFF")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        for row in sheet.iter_rows(min_row=2):
+            for cell in row:
+                cell.fill = data_fill
+
+        # Freeze the first column and row
+        to_freeze = sheet['B2']
+        sheet.freeze_panes = to_freeze
 
         # Adjust column width to fit the content
         for column in sheet.columns:
@@ -141,18 +165,6 @@ class Exporter:
             # Put 20% more to make a safe width visualization
             adjusted_width = (max_length + 2) * 1.2
             sheet.column_dimensions[column_letter].width = adjusted_width
-
-        # Apply color scheme to the table
-        header_fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
-        data_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
-        header_row = sheet[1]
-        for cell in header_row:
-            cell.fill = header_fill
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-        for row in sheet.iter_rows(min_row=2):
-            for cell in row:
-                cell.fill = data_fill
 
         # Save the workbook
         workbook.save(xls_path)
@@ -327,7 +339,6 @@ def list_cloudsql_instances(project_id):
     Logger.log (1, f"PRJ: {project_id} - CloudSQL")
 
     # -----
-    # https://stackoverflow.com/questions/69658130/how-can-i-get-list-of-all-cloud-sql-gcp-instances-which-are-stopped-in-pytho
     instances = []
 
     if not check_api_is_enabled(project_id,'sqladmin'):
@@ -345,9 +356,15 @@ def list_cloudsql_instances(project_id):
     Logger.log(2, f' |- Found {len(resp.items)}')
 
     for inst in resp.items:
+        # https://stackoverflow.com/questions/69658130/how-can-i-get-list-of-all-cloud-sql-gcp-instances-which-are-stopped-in-pytho
+        # settings.activationPolicy NEVER - machine is stopped
+        #   Always - machine is running
+        state = "STOPPED" if inst.settings.activationPolicy == "NEVER" else "RUNNING"
+
         instance_data = {
             'project': project_id,
             'name': inst.name,
+            'state': state,
             'database_version': inst.databaseVersion,
             'installedVersion': inst.databaseInstalledVersion,
             'tier': inst.settings.tier,
