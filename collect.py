@@ -51,10 +51,11 @@ class Exporter:
     def set_outputs(cls, outputs):
         cls.outputs = outputs
         os.makedirs(cls.out_dir, exist_ok=True)
-
+        friendly_date = datetime.datetime.today().strftime('%d%m%y')
         # Delete the file if it exists
         if 'xls' in outputs:
-            xls_path = os.path.join(cls.out_dir, 'output.xlsx')
+            xls_path = os.path.join(
+                cls.out_dir, f"googleResourceInventory_{friendly_date}.xlsx")
             if os.path.exists(xls_path):
                 os.remove(xls_path)
 
@@ -74,7 +75,8 @@ class Exporter:
     
     @classmethod
     def save_to_csv(cls, data, resource_type):
-        output_path = os.path.join(cls.out_dir, f"output_{resource_type}.csv")
+        output_path = os.path.join(
+            cls.out_dir, f"googleResourceInventory_{resource_type}.csv")
         with open(output_path, 'w', newline='') as csvfile:
             # Write a line (commented) that has some metadata info about this file
             csvfile.write(f'# Type: {resource_type} Date: {cls.date}\n')
@@ -87,13 +89,15 @@ class Exporter:
 
     @classmethod
     def save_to_json(cls, data, resource_type):
-        json_path = os.path.join(cls.out_dir, f'output_{resource_type}.json')
+        json_path = os.path.join(
+            cls.out_dir, f'googleResourceInventory_{resource_type}.json')
         with open(json_path, 'w') as file:
             json.dump(data, file, indent=4)
 
     @classmethod
     def save_to_xls(cls, data, resource_type):
-        xls_path = os.path.join(cls.out_dir, 'output.xlsx')
+        friendly_date = datetime.datetime.today().strftime('%d%m%y')
+        xls_path = os.path.join(cls.out_dir, f"googleResourceInventory_{friendly_date}.xlsx")
         
         # Check if the file exists
         file_exists = os.path.exists(xls_path)
@@ -378,6 +382,8 @@ def list_cloudsql_instances(project_id):
     return instances
 
 def list_functions(project_id):
+
+    # https://cloud.google.com/functions/docs/reference/rest/v1/projects.locations.functions/list
     Logger.log (1, f"PRJ: {project_id} - Functions")
 
     functions = []
@@ -393,21 +399,24 @@ def list_functions(project_id):
         ).execute()
     resp = EasyDict(raw_resp)
 
-    Logger.log(2, f' |- Found {len(resp.functions)}')
+    Logger.log(2, f' |- Functions response: {resp}')
 
-    for fnc in resp.functions:
-        #print(f'|{fnc}|')
-        parts = fnc.name.split('/')
-        location_id = parts[3]
-        function_name = parts[5]
+    if 'functions' in resp:
+        Logger.log(2, f' |- Found {len(resp.functions)}')
+
+        for fnc in resp.functions:
+            #print(f'|{fnc}|')
+            parts = fnc.name.split('/')
+            location_id = parts[3]
+            function_name = parts[5]
 
         function_data = {
-            'project': project_id,
-            'location': location_id,
-            'name': function_name,
-            'status': fnc.status,
-            'runtime': fnc.runtime,
-            'availableMemoryMb': fnc.availableMemoryMb
+             'project': project_id,
+              'location': location_id,
+             'name': function_name,
+             'status': fnc.status,
+             'runtime': fnc.runtime,
+             'availableMemoryMb': fnc.availableMemoryMb
         }
         functions.append(function_data)
 
@@ -657,24 +666,34 @@ def list_networks(project_id):
     raw_resp = client.networks().list(project=project_id).execute()
     vpc_resp = EasyDict(raw_resp)
 
-    for vpc in vpc_resp.items:
+    try:
+        for vpc in vpc_resp.items:
+            network_data = {
+                'project': project_id,
+                'name': vpc.name
+            }
+            networks['net'].append(network_data)
+
+            # Collect peering information
+            if 'peerings' in vpc:
+                for peer in vpc.peerings:
+                    peer_data = {
+                        'project': project_id,
+                        'network': vpc.name,
+                        'peer_network': peer.network
+                    }
+                    networks['peer'].append(peer_data)
+
+        return networks
+    except:
+        Logger.log(1, f"Unable to process Networks for project: {project_id}")
         network_data = {
             'project': project_id,
-            'name': vpc.name
+            'name': '-'
         }
         networks['net'].append(network_data)
-
-        # Collect peering information
-        if 'peerings' in vpc:
-            for peer in vpc.peerings:
-                peer_data = {
-                    'project': project_id,
-                    'network': vpc.name,
-                    'peer_network': peer.network
-                }
-                networks['peer'].append(peer_data)
-
-    return networks
+        return networks
+        TODO: "Put in a default value of NA."
 
 def list_deployments(project_id):
     Logger.log(1, f"PRJ: {project_id} - DeploymentManager")
