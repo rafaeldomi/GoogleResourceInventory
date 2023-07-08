@@ -63,6 +63,14 @@ Example: Collect data of gcs and gke only:
 - VPC
 - VPN
 
+## Collect from multiple projects
+By passing parameter -m <textfile> will allow to loop through multiple projects.
+Text file format: List of project_id(Number) saperated by new line.
+i.e:
+```bash
+./collect.py -m projects.txt -r compute
+```
+
 ## Questions
 - Question: Why reading compute machines that some time?<br>
   Response: During the process of reading compute machines, the collector reads also the 1-The metrics of CPU from the monitoring service 2-Get the machineType for CPU e mem
